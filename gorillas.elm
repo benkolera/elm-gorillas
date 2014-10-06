@@ -55,6 +55,17 @@ currentGorilla game =
       PlayerB -> game.gorillaB    
   in Maybe.map chooseGorilla game.turn
 
+modifyCurrentGorilla : (Gorilla -> Gorilla) -> Model -> Model
+modifyCurrentGorilla f game = 
+  if game.turn == Just PlayerA
+  then { game | gorillaA <- f (game.gorillaA)}
+  else if game.turn == Just PlayerB  
+  then { game | gorillaA <- f (game.gorillaA)}
+  else game
+
+setBanana : Maybe Banana -> Model -> Model
+setBanana b game = { game | banana <- b }
+
 thrownBanana : Int -> Float -> Gorilla -> Banana
 thrownBanana angle power g = 
   { x         = g.x 
@@ -70,8 +81,11 @@ throwBanana : Bool -> Model -> Model
 throwBanana isSpace game =
   let throwBanana g = Just (thrownBanana 45 100 g) 
   in case (isSpace,game.banana) of
-    (True,Nothing) -> { game | banana <- Maybe.map (thrownBanana 45 100) <| currentGorilla game }
-    (_,_)          -> game
+    (True,Nothing) -> 
+      game 
+        |> setBanana (Maybe.map (thrownBanana 45 100) <| currentGorilla game)
+        |> modifyCurrentGorilla (\g -> { g | throwing <- True } )
+    (_,_) -> game
 
 (>>=) : Maybe a -> (a -> Maybe b) -> Maybe b
 (>>=) ma f = maybe Nothing f ma
@@ -90,10 +104,14 @@ explodeBanana game =
     else if b.y <= 0 then Just { b | exploding <- True , vx <- 0 , vy <- 0 }
     else Just b
   in { game | banana <- game.banana >>= doExplode }  
-  
+
+stopThrowAnimation : Model -> Model
+stopThrowAnimation = modifyCurrentGorilla (\g -> { g | throwing <- False } ) 
+ 
 step : (Float,Bool) -> Model -> Model
 step (dt,isSpace) game = 
   game 
+    |> stopThrowAnimation 
     |> throwBanana isSpace
     |> gravity dt
     |> physics dt
