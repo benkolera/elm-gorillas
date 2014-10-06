@@ -83,7 +83,7 @@ modifyCurrentGorilla f game =
     if player == Just PlayerA
     then { game | gorillaA <- f (game.gorillaA)}
     else if player == Just PlayerB  
-    then { game | gorillaA <- f (game.gorillaA)}
+    then { game | gorillaB <- f (game.gorillaB)}
     else game
 
 modifyBanana : (Banana -> Banana) -> Game -> Game
