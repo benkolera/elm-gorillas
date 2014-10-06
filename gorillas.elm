@@ -8,10 +8,16 @@ type Gorilla =
   , throwing : Bool 
   }
 
-type Model = { gorilla1 : Gorilla }
+type Model = { gorilla1 : Gorilla , banana : Maybe Banana }
+type Banana = 
+  { x  : Float 
+  , y  : Float
+  , dx : Float 
+  , dy : Float
+  }
 
 gorilla = { x = 0 , dir = Left , throwing = False }
-model   = { gorilla1 = gorilla }
+model   = { gorilla1 = gorilla , banana = Nothing }
 
 stepGorilla : Bool -> Gorilla -> Gorilla 
 stepGorilla isSpace g = { g | throwing <- isSpace}
