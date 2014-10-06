@@ -12,8 +12,8 @@ type Gorilla =
   , throwing  : Bool 
   }
 
-type Moveable = 
-  { x  : Float
+type Moveable a = { a | 
+    x  : Float
   , y  : Float
   , vx : Float
   , vy : Float 
@@ -96,16 +96,14 @@ step (dt,isSpace) game =
     |> explodeBanana 
     |> Debug.watch "Game" 
 
--- applyGravity : Float -> Moveable -> Moveable
-applyGravity : Float -> Banana -> Banana
+applyGravity : Float -> Moveable a -> Moveable a
 applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
 
 gravity : Float -> Model -> Model
 gravity dt game =
   { game | banana <- Maybe.map (applyGravity dt) game.banana }
 
--- applyPhysics : Float -> Moveable -> Moveable
-applyPhysics : Float -> Banana -> Banana
+applyPhysics : Float -> Moveable a -> Moveable a
 applyPhysics dt m = 
   { m | 
     x <- m.x + dt * m.vx,
