@@ -19,7 +19,7 @@ ToDo
 ----
 - Build the gorilla positions from signals (random + window width)
 - Show current gorilla visually with angle selection ui element
-- Flow cursor keys into step function so that currentPlayer can choose angle
+- Modify current angle with dy input.
 - Hold down space to choose power (and animate the power meter on the angle selection bar)
 - Detect explosion collision with gorillas
 - Visually distinguish winning and dead gorilla.

@@ -4,6 +4,8 @@ import Maybe
 import Maybe (maybe,isJust)
 import Window
 
+-- Model -------------------------------------------------------------
+
 data Direction = Left | Right
 data Player    = PlayerA | PlayerB
 type Gorilla = 
@@ -23,8 +25,7 @@ type Model =
   { gorillaA : Gorilla 
   , gorillaB : Gorilla 
   , banana   : Maybe Banana 
-  , turn     : Maybe Player
-  , nextTurn : Maybe Player
+  , turn     : Maybe Turn
   }
 
 type Banana = 
@@ -37,31 +38,42 @@ type Banana =
   , exploding : Bool
   }
 
+type Turn = 
+  { player : Player 
+  , angle : Int 
+  , power: Maybe Float 
+  , fired : Bool 
+  }
+
 gorillaA = { x = -800 , direction = Left , throwing = False }
 gorillaB = { x = 800  , direction = Right , throwing = False }
 model    = 
   { gorillaA = gorillaA
   , gorillaB = gorillaB 
   , banana = Nothing 
-  , turn = Just PlayerA 
-  , nextTurn = Just PlayerB 
+  , turn = Just { player = PlayerA , angle = 45 , power = Nothing , fired = False }
   }
 
+gorillaFromTurn : Model -> Turn -> Gorilla
+gorillaFromTurn game t = case t.player of
+  PlayerA -> game.gorillaA
+  PlayerB -> game.gorillaB    
+
 currentGorilla : Model -> Maybe Gorilla
-currentGorilla game = 
-  let 
-    chooseGorilla p = case p of
-      PlayerA -> game.gorillaA
-      PlayerB -> game.gorillaB    
-  in Maybe.map chooseGorilla game.turn
+currentGorilla game = Maybe.map (gorillaFromTurn game) game.turn
 
 modifyCurrentGorilla : (Gorilla -> Gorilla) -> Model -> Model
 modifyCurrentGorilla f game = 
-  if game.turn == Just PlayerA
-  then { game | gorillaA <- f (game.gorillaA)}
-  else if game.turn == Just PlayerB  
-  then { game | gorillaA <- f (game.gorillaA)}
-  else game
+  let player = Maybe.map (\t -> t.player) game.turn
+  in 
+    if player == Just PlayerA
+    then { game | gorillaA <- f (game.gorillaA)}
+    else if player == Just PlayerB  
+    then { game | gorillaA <- f (game.gorillaA)}
+    else game
+
+modifyBanana : (Banana -> Banana) -> Model -> Model
+modifyBanana f game = { game | banana <- Maybe.map f game.banana }
 
 setBanana : Maybe Banana -> Model -> Model
 setBanana b game = { game | banana <- b }
@@ -79,24 +91,17 @@ thrownBanana angle power g =
 
 throwBanana : Bool -> Model -> Model
 throwBanana isSpace game =
-  let throwBanana g = Just (thrownBanana 45 100 g) 
+  let throwBanana t = thrownBanana t.angle (maybe 1 identity t.power)  (gorillaFromTurn game t)
   in case (isSpace,game.banana) of
     (True,Nothing) -> 
       game 
-        |> setBanana (Maybe.map (thrownBanana 45 100) <| currentGorilla game)
+        |> setBanana (Maybe.map throwBanana game.turn)
         |> modifyCurrentGorilla (\g -> { g | throwing <- True } )
     (_,_) -> game
 
 (>>=) : Maybe a -> (a -> Maybe b) -> Maybe b
 (>>=) ma f = maybe Nothing f ma
 
-tickBananaFrame : Banana -> Banana
-tickBananaFrame b = { b | frame <- (b.frame + 1) % 4 }
-
-spinBanana : Model -> Model
-spinBanana game = 
-  { game | banana <- Maybe.map tickBananaFrame game.banana }  
- 
 explodeBanana : Model -> Model
 explodeBanana game = 
   let doExplode b = 
@@ -108,16 +113,15 @@ explodeBanana game =
 stopThrowAnimation : Model -> Model
 stopThrowAnimation = modifyCurrentGorilla (\g -> { g | throwing <- False } ) 
  
-step : (Float,Bool) -> Model -> Model
-step (dt,isSpace) game = 
+step : (Float,Bool,Int) -> Model -> Model
+step (dt,isSpace,dy) game = 
   game 
     |> stopThrowAnimation 
     |> throwBanana isSpace
     |> gravity dt
     |> physics dt
-    |> spinBanana 
+    |> modifyBanana (\b -> { b | frame <- (b.frame + 1) % 4 } )
     |> explodeBanana 
-    |> Debug.watch "Game" 
 
 applyGravity : Float -> Moveable a -> Moveable a
 applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
@@ -136,6 +140,8 @@ applyPhysics dt m =
 physics : Float -> Model -> Model
 physics dt game =
   { game | banana <- Maybe.map (applyPhysics dt) game.banana }
+
+-- Display -----------------------------------------------------------
 
 directionString : Direction -> String
 directionString d = case d of 
@@ -192,12 +198,20 @@ display (w',h') m =
     :: gorillaForm groundY m.gorillaB
     :: maybe [] (\ x -> [bananaForm groundY x]) m.banana )
       
+-- Input Signals -----------------------------------------------------
+
+input : Signal (Float,Bool,Int)
+input = 
+  let sigs = lift3 (,,) time Keyboard.space upDown
+  in sampleOn time sigs
+
+upDown : Signal Int
+upDown = lift (\x -> x.y) Keyboard.arrows
+
+time : Signal Float
+time = lift (\t -> t/20) (fps 25)
+
+-- Main --------------------------------------------------------------
+
 main : Signal Element
 main = lift2 display Window.dimensions (foldp step model input)
-
-input : Signal (Float,Bool)
-input = 
-  let delta   = lift (\t -> t/20) (fps 25)
-      deltaKb = lift2 (,) delta (Keyboard.space)
-  in
-    Debug.watch "input" <~ sampleOn delta deltaKb
