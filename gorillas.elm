@@ -67,9 +67,6 @@ groundForm : Float -> Float -> Form
 groundForm w h =
   rect w 50 |> filled (rgb 74 167 43) |> move (0, 24 - h/2)
 
-maybeBananaForm : Maybe Banana -> [Form]
-maybeBananaForm mb = maybe [] (\ x -> [bananaForm x]) mb
-
 display : (Int, Int) -> Model -> Element
 display (w',h') m =
   let (w,h)      = (toFloat w', toFloat h')
@@ -80,7 +77,7 @@ display (w',h') m =
       :: groundForm w h
       :: gorillaForm groundY m.gorilla1
       :: gorillaForm groundY m.gorilla2
-      :: maybeBananaForm m.banana )
+      :: maybe [] (\ x -> [bananaForm x]) m.banana )
       
 main : Signal Element
 main = lift2 display Window.dimensions (foldp step model input)
