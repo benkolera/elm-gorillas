@@ -1,42 +1,120 @@
+import Debug
 import Keyboard
-import Maybe (maybe)
+import Maybe
+import Maybe (maybe,isJust)
 import Window
 
 data Direction = Left | Right
+data Player    = PlayerA | PlayerB
 type Gorilla = 
   { x         : Float 
   , direction : Direction 
   , throwing  : Bool 
   }
 
+type Moveable = 
+  { x  : Float
+  , y  : Float
+  , vx : Float
+  , vy : Float 
+  }
+
 type Model = 
-  { gorilla1 : Gorilla 
-  , gorilla2 : Gorilla 
+  { gorillaA : Gorilla 
+  , gorillaB : Gorilla 
   , banana   : Maybe Banana 
+  , turn     : Maybe Player
+  , nextTurn : Maybe Player
   }
 
 type Banana = 
   { x         : Float 
   , y         : Float
-  , dx        : Float 
-  , dy        : Float
+  , vx        : Float 
+  , vy        : Float
   , frame     : Int
   , direction : Direction
   }
 
-gorilla1 : Gorilla           
-gorilla1 = { x = -800 , direction = Left , throwing = False }
-gorilla2 : Gorilla           
-gorilla2 = { x = 800  , direction = Right , throwing = False }
-model : Model
-model    = { gorilla1 = gorilla1, gorilla2 = gorilla2 , banana = Nothing }
+gorillaA = { x = -800 , direction = Left , throwing = False }
+gorillaB = { x = 800  , direction = Right , throwing = False }
+model    = 
+  { gorillaA = gorillaA
+  , gorillaB = gorillaB 
+  , banana = Nothing 
+  , turn = Just PlayerA 
+  , nextTurn = Just PlayerB 
+  }
 
-stepGorilla : Bool -> Gorilla -> Gorilla 
-stepGorilla isSpace g = { g | throwing <- isSpace}
+currentGorilla : Model -> Maybe Gorilla
+currentGorilla game = 
+  let 
+    chooseGorilla p = case p of
+      PlayerA -> game.gorillaA
+      PlayerB -> game.gorillaB    
+  in Maybe.map chooseGorilla game.turn
 
-step : Bool -> Model -> Model
-step isSpace game = 
-  { game | gorilla1 <- stepGorilla isSpace game.gorilla1 }
+thrownBanana : Int -> Float -> Gorilla -> Banana
+thrownBanana angle power g = 
+  { x         = g.x 
+  , y         = 30 
+  , vx        = 20 
+  , vy        = 20  
+  , frame     = 0 
+  , direction = g.direction 
+  }
+
+throwBanana : Bool -> Model -> Model
+throwBanana isSpace game =
+  let throwBanana g = Just (thrownBanana 45 100 g) 
+  in case (isSpace,game.banana) of
+    (True,Nothing) -> { game | banana <- Maybe.map (thrownBanana 45 100) <| currentGorilla game }
+    (_,_)          -> game
+
+(>>=) : Maybe a -> (a -> Maybe b) -> Maybe b
+(>>=) ma f = maybe Nothing f ma
+
+tickBananaFrame : Banana -> Banana
+tickBananaFrame b = { b | frame <- (b.frame + 1) % 4 }
+
+spinBanana : Model -> Model
+spinBanana game = 
+  { game | banana <- Maybe.map tickBananaFrame game.banana }  
+ 
+explodeBanana : Model -> Model
+explodeBanana game = 
+  let doExplode b = if b.y == 0 then Nothing else Just b
+  in { game | banana <- game.banana >>= doExplode }  
+  
+step : (Float,Bool) -> Model -> Model
+step (dt,isSpace) game = 
+  game 
+    |> throwBanana isSpace
+    |> gravity dt
+    |> physics dt
+    |> spinBanana 
+    |> explodeBanana 
+    |> Debug.watch "Game" 
+
+-- applyGravity : Float -> Moveable -> Moveable
+applyGravity : Float -> Banana -> Banana
+applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
+
+gravity : Float -> Model -> Model
+gravity dt game =
+  { game | banana <- Maybe.map (applyGravity dt) game.banana }
+
+-- applyPhysics : Float -> Moveable -> Moveable
+applyPhysics : Float -> Banana -> Banana
+applyPhysics dt m = 
+  { m | 
+    x <- m.x + dt * m.vx,
+    y <- max 0 (m.y + dt * m.vy)
+  }
+
+physics : Float -> Model -> Model
+physics dt game =
+  { game | banana <- Maybe.map (applyPhysics dt) game.banana }
 
 directionString : Direction -> String
 directionString d = case d of 
@@ -57,11 +135,11 @@ gorillaForm groundY g =
 skyForm : Float -> Float -> Form 
 skyForm w h = rect w h |> filled (rgb 174 238 238)
 
-bananaForm : Banana -> Form
-bananaForm b =   
+bananaForm : Float -> Banana -> Form
+bananaForm groundY b =   
   let src = imagePath "banana" b.direction (show b.frame)
       img = image 20 20 src
-  in img |> toForm |> move (b.x,b.y)
+  in img |> toForm |> move (b.x,b.y + groundY )
 
 groundForm : Float -> Float -> Form
 groundForm w h =
@@ -71,16 +149,19 @@ display : (Int, Int) -> Model -> Element
 display (w',h') m =
   let (w,h)      = (toFloat w', toFloat h')
       groundY    = 62 - h/2
-  in
-    collage w' h' 
-      (  skyForm w h
-      :: groundForm w h
-      :: gorillaForm groundY m.gorilla1
-      :: gorillaForm groundY m.gorilla2
-      :: maybe [] (\ x -> [bananaForm x]) m.banana )
+  in collage w' h' 
+    (  skyForm w h
+    :: groundForm w h
+    :: gorillaForm groundY m.gorillaA
+    :: gorillaForm groundY m.gorillaB
+    :: maybe [] (\ x -> [bananaForm groundY x]) m.banana )
       
 main : Signal Element
 main = lift2 display Window.dimensions (foldp step model input)
 
-input : Signal Bool
-input = Keyboard.space
+input : Signal (Float,Bool)
+input = 
+  let delta   = lift (\t -> t/20) (fps 25)
+      deltaKb = lift2 (,) delta (Keyboard.space)
+  in
+    Debug.watch "input" <~ sampleOn delta deltaKb
