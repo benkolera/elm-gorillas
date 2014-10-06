@@ -12,6 +12,6 @@ Running the code
 ----------------
 
 * Install the [elm-platform](https://github.com/elm-lang/elm-platform)
-* Run elm-reactor
-* Open up [http://localhost:8000/]
+* Run elm-reactor in this directory.
+* Open up [http://localhost:8000/gorillas.elm](http://localhost:8000/gorillas.elm)
 
