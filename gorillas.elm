@@ -34,6 +34,7 @@ type Banana =
   , vy        : Float
   , frame     : Int
   , direction : Direction
+  , exploding : Bool
   }
 
 gorillaA = { x = -800 , direction = Left , throwing = False }
@@ -62,6 +63,7 @@ thrownBanana angle power g =
   , vy        = 20  
   , frame     = 0 
   , direction = g.direction 
+  , exploding = False
   }
 
 throwBanana : Bool -> Model -> Model
@@ -83,7 +85,10 @@ spinBanana game =
  
 explodeBanana : Model -> Model
 explodeBanana game = 
-  let doExplode b = if b.y == 0 then Nothing else Just b
+  let doExplode b = 
+    if b.exploding && b.frame >= 3 then Nothing 
+    else if b.y <= 0 then Just { b | exploding <- True , vx <- 0 , vy <- 0 }
+    else Just b
   in { game | banana <- game.banana >>= doExplode }  
   
 step : (Float,Bool) -> Model -> Model
@@ -128,16 +133,31 @@ gorillaForm groundY g =
   let frame        = if g.throwing then "throwing" else "base"
       src          = imagePath "gorilla" g.direction frame
       gorillaImage = image 60 60 src
+
   in gorillaImage |> toForm |> move (g.x,groundY)
 
 skyForm : Float -> Float -> Form 
 skyForm w h = rect w h |> filled (rgb 174 238 238)
 
+bananaImage : Banana -> Form
+bananaImage b = 
+  let src = imagePath "banana" b.direction (show b.frame)
+  in image 20 20 src |> toForm
+
+bananaExplosion : Banana -> Form
+bananaExplosion b =
+  let radius = (b.frame + 1) * 10
+      grad   = radial (0,0) (radius / 4) (0,0) radius 
+        [ (0, rgb 128 0 0)
+        , (0.2, rgb 256 0 0)
+        , (1,   rgb 256 128 128)
+        ] 
+  in gradient grad (circle radius) 
+
 bananaForm : Float -> Banana -> Form
 bananaForm groundY b =   
-  let src = imagePath "banana" b.direction (show b.frame)
-      img = image 20 20 src
-  in img |> toForm |> move (b.x,b.y + groundY )
+  let form = if b.exploding then bananaExplosion b else bananaImage b
+  in form |> move (b.x,b.y + groundY)
 
 groundForm : Float -> Float -> Form
 groundForm w h =
