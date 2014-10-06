@@ -15,3 +15,12 @@ Running the code
 * Run elm-reactor in this directory.
 * Open up [http://localhost:8000/gorillas.elm](http://localhost:8000/gorillas.elm)
 
+Acknowledgements
+----------------
+
+Game assets have been borrowed from:
+
+http://www.java-online.ch/gamegrid/index.php?inhalt_mitte=simulationen/gorillagame.inc.php
+
+Though given these have been published without any visible license I should create my
+own assets sometime soon.
