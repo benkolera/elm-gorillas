@@ -2,6 +2,7 @@ import Debug
 import Keyboard
 import Maybe
 import Maybe (maybe,isJust)
+import Random
 import Window
 
 -- Model -------------------------------------------------------------
@@ -21,7 +22,7 @@ type Moveable a = { a |
   , vy : Float 
   }
 
-type Model = 
+type Game = 
   { gorillaA : Gorilla 
   , gorillaB : Gorilla 
   , banana   : Maybe Banana 
@@ -45,6 +46,19 @@ type Turn =
   , fired : Bool 
   }
 
+type GameSeed = 
+  { width          : Int
+  , height         : Int 
+  , playerAPosSeed : Float 
+  , playerBPosSeed : Float 
+  }
+
+type Input = 
+  { deltaTime    : Float
+  , spacePressed : Bool 
+  , upDownDelta  : Int 
+  }
+
 gorillaA = { x = -800 , direction = Left , throwing = False }
 gorillaB = { x = 800  , direction = Right , throwing = False }
 model    = 
@@ -54,15 +68,15 @@ model    =
   , turn = Just { player = PlayerA , angle = 45 , power = Nothing , fired = False }
   }
 
-gorillaFromTurn : Model -> Turn -> Gorilla
+gorillaFromTurn : Game -> Turn -> Gorilla
 gorillaFromTurn game t = case t.player of
   PlayerA -> game.gorillaA
   PlayerB -> game.gorillaB    
 
-currentGorilla : Model -> Maybe Gorilla
+currentGorilla : Game -> Maybe Gorilla
 currentGorilla game = Maybe.map (gorillaFromTurn game) game.turn
 
-modifyCurrentGorilla : (Gorilla -> Gorilla) -> Model -> Model
+modifyCurrentGorilla : (Gorilla -> Gorilla) -> Game -> Game
 modifyCurrentGorilla f game = 
   let player = Maybe.map (\t -> t.player) game.turn
   in 
@@ -72,10 +86,10 @@ modifyCurrentGorilla f game =
     then { game | gorillaA <- f (game.gorillaA)}
     else game
 
-modifyBanana : (Banana -> Banana) -> Model -> Model
+modifyBanana : (Banana -> Banana) -> Game -> Game
 modifyBanana f game = { game | banana <- Maybe.map f game.banana }
 
-setBanana : Maybe Banana -> Model -> Model
+setBanana : Maybe Banana -> Game -> Game
 setBanana b game = { game | banana <- b }
 
 thrownBanana : Int -> Float -> Gorilla -> Banana
@@ -89,7 +103,7 @@ thrownBanana angle power g =
   , exploding = False
   }
 
-throwBanana : Bool -> Model -> Model
+throwBanana : Bool -> Game -> Game
 throwBanana isSpace game =
   let throwBanana t = thrownBanana t.angle (maybe 1 identity t.power)  (gorillaFromTurn game t)
   in case (isSpace,game.banana) of
@@ -102,7 +116,7 @@ throwBanana isSpace game =
 (>>=) : Maybe a -> (a -> Maybe b) -> Maybe b
 (>>=) ma f = maybe Nothing f ma
 
-explodeBanana : Model -> Model
+explodeBanana : Game -> Game
 explodeBanana game = 
   let doExplode b = 
     if b.exploding && b.frame >= 3 then Nothing 
@@ -110,23 +124,26 @@ explodeBanana game =
     else Just b
   in { game | banana <- game.banana >>= doExplode }  
 
-stopThrowAnimation : Model -> Model
+stopThrowAnimation : Game -> Game
 stopThrowAnimation = modifyCurrentGorilla (\g -> { g | throwing <- False } ) 
  
-step : (Float,Bool,Int) -> Model -> Model
-step (dt,isSpace,dy) game = 
+stepGame : Input -> Game -> Game
+stepGame input game = 
   game 
     |> stopThrowAnimation 
-    |> throwBanana isSpace
-    |> gravity dt
-    |> physics dt
+    |> throwBanana input.spacePressed
+    |> gravity input.deltaTime
+    |> physics input.deltaTime
     |> modifyBanana (\b -> { b | frame <- (b.frame + 1) % 4 } )
     |> explodeBanana 
+
+step : (GameSeed,Input) -> Maybe Game -> Maybe Game
+step (seed,input) = maybe (Just model) (stepGame input >> Just)
 
 applyGravity : Float -> Moveable a -> Moveable a
 applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
 
-gravity : Float -> Model -> Model
+gravity : Float -> Game -> Game
 gravity dt game =
   { game | banana <- Maybe.map (applyGravity dt) game.banana }
 
@@ -137,7 +154,7 @@ applyPhysics dt m =
     y <- max 0 (m.y + dt * m.vy)
   }
 
-physics : Float -> Model -> Model
+physics : Float -> Game -> Game
 physics dt game =
   { game | banana <- Maybe.map (applyPhysics dt) game.banana }
 
@@ -187,22 +204,26 @@ groundForm : Float -> Float -> Form
 groundForm w h =
   rect w 50 |> filled (rgb 74 167 43) |> move (0, 24 - h/2)
 
-display : (Int, Int) -> Model -> Element
-display (w',h') m =
-  let (w,h)      = (toFloat w', toFloat h')
-      groundY    = 62 - h/2
-  in collage w' h' 
-    (  skyForm w h
-    :: groundForm w h
-    :: gorillaForm groundY m.gorillaA
-    :: gorillaForm groundY m.gorillaB
-    :: maybe [] (\ x -> [bananaForm groundY x]) m.banana )
-      
+gameForms : Float -> Float -> Float -> Game -> [Form]
+gameForms w h groundY game = 
+  ( gorillaForm groundY game.gorillaA
+  :: gorillaForm groundY game.gorillaB
+  :: maybe [] (\ x -> [bananaForm groundY x]) game.banana 
+  )
+
+display : (Int, Int) -> Maybe Game -> Element
+display (w',h') game =
+  let (w,h)   = (toFloat w', toFloat h')
+      groundY = 62 - h/2
+      gFs     = maybe [] (gameForms w h groundY) game
+  in collage w' h' (  skyForm w h :: groundForm w h :: gFs )  
+
 -- Input Signals -----------------------------------------------------
 
-input : Signal (Float,Bool,Int)
+input : Signal Input
 input = 
-  let sigs = lift3 (,,) time Keyboard.space upDown
+  let mkInput dt is ud = { deltaTime = dt , spacePressed = is , upDownDelta = ud }
+      sigs = lift3 mkInput time Keyboard.space upDown
   in sampleOn time sigs
 
 upDown : Signal Int
@@ -211,7 +232,22 @@ upDown = lift (\x -> x.y) Keyboard.arrows
 time : Signal Float
 time = lift (\t -> t/20) (fps 25)
 
+gameSeed : Signal GameSeed
+gameSeed = 
+  let posASeed = Random.float Window.dimensions
+      posBSeed = Random.float Window.dimensions
+      mkSeed (w,h) a b = 
+        { width          = w 
+        , height         = h 
+        , playerAPosSeed = a 
+        , playerBPosSeed = b }
+  in 
+    lift3 mkSeed Window.dimensions posASeed posBSeed 
+
+gameSignal : Signal (GameSeed,Input)
+gameSignal = lift2 (,) gameSeed input
+
 -- Main --------------------------------------------------------------
 
 main : Signal Element
-main = lift2 display Window.dimensions (foldp step model input)
+main = lift2 display Window.dimensions (foldp step Nothing gameSignal)
