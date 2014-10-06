@@ -144,8 +144,7 @@ applyGravity : Float -> Moveable a -> Moveable a
 applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
 
 gravity : Float -> Game -> Game
-gravity dt game =
-  { game | banana <- Maybe.map (applyGravity dt) game.banana }
+gravity dt game = modifyBanana (applyGravity dt) game
 
 applyPhysics : Float -> Moveable a -> Moveable a
 applyPhysics dt m = 
@@ -155,8 +154,7 @@ applyPhysics dt m =
   }
 
 physics : Float -> Game -> Game
-physics dt game =
-  { game | banana <- Maybe.map (applyPhysics dt) game.banana }
+physics dt game = modifyBanana (applyPhysics dt) game
 
 -- Display -----------------------------------------------------------
 
