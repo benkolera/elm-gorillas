@@ -10,7 +10,7 @@ import Window
 data Direction = Left | Right
 data Player    = PlayerA | PlayerB
 type Gorilla = 
-  { x         : Float 
+  { x         : Float
   , direction : Direction 
   , throwing  : Bool 
   }
@@ -30,7 +30,7 @@ type Game =
   }
 
 type Banana = 
-  { x         : Float 
+  { x         : Float
   , y         : Float
   , vx        : Float 
   , vy        : Float
@@ -48,7 +48,7 @@ type Turn =
 
 type GameSeed = 
   { width          : Int
-  , height         : Int 
+  , height         : Int
   , playerAPosSeed : Float 
   , playerBPosSeed : Float 
   }
@@ -59,11 +59,18 @@ type Input =
   , upDownDelta  : Int 
   }
 
-gorillaA = { x = -800 , direction = Left , throwing = False }
-gorillaB = { x = 800  , direction = Right , throwing = False }
-model    = 
-  { gorillaA = gorillaA
-  , gorillaB = gorillaB 
+gorillaFromSeed : Int -> Float -> Direction -> Gorilla
+gorillaFromSeed fullWidth posSeed dir = 
+  let margin = 120
+      w = toFloat fullWidth / 2
+      posRel = w * posSeed |> max margin |> min (w - margin)
+      pos = if dir == Left then 0 - posRel else posRel
+  in { x = pos , direction = dir , throwing = False }      
+
+newGame : GameSeed -> Game
+newGame seed = 
+  { gorillaA = gorillaFromSeed seed.width seed.playerAPosSeed Left
+  , gorillaB = gorillaFromSeed seed.width seed.playerBPosSeed Right
   , banana = Nothing 
   , turn = Just { player = PlayerA , angle = 45 , power = Nothing , fired = False }
   }
@@ -126,7 +133,11 @@ explodeBanana game =
 
 stopThrowAnimation : Game -> Game
 stopThrowAnimation = modifyCurrentGorilla (\g -> { g | throwing <- False } ) 
- 
+
+gorillaOutOfBounds : (GameSeed,Game) -> Bool
+gorillaOutOfBounds (seed,game) = 
+  let availableWidth = (toFloat seed.width / 2) - 30
+  in availableWidth < abs game.gorillaA.x || availableWidth < game.gorillaB.x
 stepGame : Input -> Game -> Game
 stepGame input game = 
   game 
@@ -137,8 +148,14 @@ stepGame input game =
     |> modifyBanana (\b -> { b | frame <- (b.frame + 1) % 4 } )
     |> explodeBanana 
 
-step : (GameSeed,Input) -> Maybe Game -> Maybe Game
-step (seed,input) = maybe (Just model) (stepGame input >> Just)
+step : (GameSeed,Input) -> Maybe (GameSeed,Game) -> Maybe (GameSeed,Game)
+step (seed,input) = 
+  let step' (oldSeed,g) = 
+        if gorillaOutOfBounds (seed,g) 
+        then newGame' 
+        else Just (seed,stepGame input g)
+      newGame'          = Just (seed,(newGame seed))
+  in maybe newGame' step'
 
 applyGravity : Float -> Moveable a -> Moveable a
 applyGravity dt m = { m | vy <- if m.y > 0 then m.vy - dt else 0 }
@@ -196,25 +213,27 @@ bananaExplosion b =
 bananaForm : Float -> Banana -> Form
 bananaForm groundY b =   
   let form = if b.exploding then bananaExplosion b else bananaImage b
-  in form |> move (b.x,b.y + groundY)
+  in form |> move (b.x, b.y + groundY)
 
 groundForm : Float -> Float -> Form
 groundForm w h =
   rect w 50 |> filled (rgb 74 167 43) |> move (0, 24 - h/2)
 
-gameForms : Float -> Float -> Float -> Game -> [Form]
-gameForms w h groundY game = 
-  ( gorillaForm groundY game.gorillaA
-  :: gorillaForm groundY game.gorillaB
-  :: maybe [] (\ x -> [bananaForm groundY x]) game.banana 
-  )
+gameElement : (GameSeed,Game) -> Element
+gameElement (seed,game) =
+  let groundY = 62 - toFloat seed.height / 2
+      w = toFloat seed.width
+      h = toFloat seed.height
+  in collage seed.width seed.height 
+    ( skyForm w h
+    :: groundForm w h
+    :: gorillaForm groundY game.gorillaA
+    :: gorillaForm groundY game.gorillaB
+    :: maybe [] (\ x -> [bananaForm groundY x]) game.banana 
+    )
 
-display : (Int, Int) -> Maybe Game -> Element
-display (w',h') game =
-  let (w,h)   = (toFloat w', toFloat h')
-      groundY = 62 - h/2
-      gFs     = maybe [] (gameForms w h groundY) game
-  in collage w' h' (  skyForm w h :: groundForm w h :: gFs )  
+display : Maybe (GameSeed,Game) -> Element
+display = maybe empty gameElement
 
 -- Input Signals -----------------------------------------------------
 
@@ -248,4 +267,4 @@ gameSignal = lift2 (,) gameSeed input
 -- Main --------------------------------------------------------------
 
 main : Signal Element
-main = lift2 display Window.dimensions (foldp step Nothing gameSignal)
+main = lift display (foldp step Nothing gameSignal)

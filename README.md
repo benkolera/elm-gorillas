@@ -17,7 +17,6 @@ Running the code
 
 ToDo
 ----
-* Build the gorilla positions from signals (random + window width)
 * Show current gorilla visually with angle selection ui element
 * Modify current angle with dy input.
 * Hold down space to choose power (and animate the power meter on the angle selection bar)
@@ -26,7 +25,7 @@ ToDo
 
 Notes
 -----
-* Why am I using floats for the x/y coords? Seems a bit funky.
+* Floats are being used for the coords because that's what Graphics.Collage does. Still dunno why. Pixels are indivisible, right?
 * Why am I using records for everything. It's getting annoying.
 
 Acknowledgements
