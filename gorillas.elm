@@ -138,6 +138,7 @@ gorillaOutOfBounds : (GameSeed,Game) -> Bool
 gorillaOutOfBounds (seed,game) = 
   let availableWidth = (toFloat seed.width / 2) - 30
   in availableWidth < abs game.gorillaA.x || availableWidth < game.gorillaB.x
+
 stepGame : Input -> Game -> Game
 stepGame input game = 
   game 
