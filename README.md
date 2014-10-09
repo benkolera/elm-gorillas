@@ -17,10 +17,10 @@ Running the code
 
 ToDo
 ----
-* Show current gorilla visually with angle selection ui element
-* Modify current angle with dy input.
-* Hold down space to choose power (and animate the power meter on the angle selection bar)
+* Animate the power meter on the angle selection bar.
 * Detect explosion collision with gorillas
+* Make sure everything works flipped.
+* Switch turns once banana exploded. 
 * Visually distinguish winning and dead gorilla.
 
 Notes
